@@ -1,0 +1,230 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Estatísticas de Questões</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f4f8;
+      padding: 2rem;
+      text-align: center;
+    }
+    .btn {
+      padding: 0.4rem 0.6rem;
+      margin: 0.2rem;
+      font-size: 0.9rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      color: white;
+    }
+    .certo { background-color: #10b981; }
+    .errado { background-color: #ef4444; }
+    .branco { background-color: #6b7280; }
+    .reset { background-color: #3b82f6; color: white; margin-top: 1rem; }
+    .btn:hover { opacity: 0.9; }
+    .stats {
+      margin-bottom: 1.5rem;
+      font-size: 1.1rem;
+    }
+    .questoes-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: left;
+    }
+    .questao {
+      background: #fff;
+      padding: 0.5rem;
+      border-radius: 6px;
+      box-shadow: 0 0 4px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .numero {
+      font-weight: bold;
+      margin-right: 1rem;
+    }
+    .marcacao {
+      min-width: 1.5rem;
+      font-size: 1.2rem;
+      margin-right: 1rem;
+    }
+    .acoes button {
+      margin-left: 0.2rem;
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <h1>📊 Estatísticas de 120 Questões</h1>
+
+  
+  <div id="cronometro" style="font-size: 1.2rem; margin-bottom: 1rem; font-weight: bold; color: #1f2937;">
+    ⏱️ Tempo: 00:00:00
+  </div>
+  <div class="stats">
+    <p>✅ Certas: <strong id="certas">0</strong> | Faltam: <strong id="faltamCertas">60</strong></p>
+    <p>❌ Erradas: <strong id="erradas">0</strong> | Faltam: <strong id="faltamErradas">60</strong></p>
+  
+    <div style="max-width: 600px; margin: 1rem auto;">
+      <div style="text-align: left;">Progresso Certas</div>
+      <div style="height: 20px; background: #e5e7eb; border-radius: 6px; overflow: hidden; margin-bottom: 0.5rem;">
+        <div id="barraCertas" style="height: 100%; background: #10b981; width: 0%;"></div>
+      </div>
+      <div style="text-align: left;">Progresso Erradas</div>
+      <div style="height: 20px; background: #e5e7eb; border-radius: 6px; overflow: hidden;">
+        <div id="barraErradas" style="height: 100%; background: #ef4444; width: 0%;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="questoes-grid"  id="questoesContainer"></div>
+
+  
+  <button class="btn reset" onclick="gerarPDF()" style="background:#16a34a;">📄 Gerar PDF</button>
+  <button class="btn reset" onclick="resetar()">🔄 Reiniciar</button>
+
+
+  <script>
+    const TOTAL = 120;
+    let respostas = [];
+
+    const certasEl = document.getElementById('certas');
+    const erradasEl = document.getElementById('erradas');
+    const faltamCertasEl = document.getElementById('faltamCertas');
+    const faltamErradasEl = document.getElementById('faltamErradas');
+    const container = document.getElementById('questoesContainer');
+
+    if (localStorage.getItem('respostas_v5')) {
+      respostas = JSON.parse(localStorage.getItem('respostas_v5'));
+    } else {
+      respostas = Array(TOTAL).fill("");
+    }
+
+    function salvar() {
+      localStorage.setItem('respostas_v5', JSON.stringify(respostas));
+    }
+
+    function marcar(indice, tipo) {
+      respostas[indice] = tipo;
+      salvar();
+      
+    const inicio = Date.now();
+    setInterval(atualizarCronometro, 1000);
+    atualizar();
+
+    }
+
+    function resetar() {
+      if (!confirm("Deseja realmente apagar todas as marcações?")) return;
+      respostas = Array(TOTAL).fill("");
+      salvar();
+      
+    const inicio = Date.now();
+    setInterval(atualizarCronometro, 1000);
+    atualizar();
+
+    }
+
+    
+    function atualizarCronometro() {
+      const agora = Date.now();
+      const decorrido = Math.floor((agora - inicio) / 1000);
+      const h = String(Math.floor(decorrido / 3600)).padStart(2, '0');
+      const m = String(Math.floor((decorrido % 3600) / 60)).padStart(2, '0');
+      const s = String(decorrido % 60).padStart(2, '0');
+      document.getElementById('cronometro').textContent = `⏱️ Tempo: ${h}:${m}:${s}`;
+    }
+
+    
+    async function gerarPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      const certas = respostas.filter(r => r === 'C').length;
+      const erradas = respostas.filter(r => r === 'E').length;
+      const brancos = respostas.filter(r => r === 'B').length;
+      const tempo = document.getElementById('cronometro').textContent;
+
+      doc.setFontSize(14);
+      doc.text("Relatório de Desempenho", 20, 20);
+      doc.setFontSize(11);
+      doc.text(tempo, 20, 30);
+      doc.text("✅ Certas: " + certas, 20, 40);
+      doc.text("❌ Erradas: " + erradas, 20, 50);
+      doc.text("⬜ Em Branco: " + brancos, 20, 60);
+      doc.text("📋 Lista de Marcações:", 20, 75);
+
+      let y = 85;
+      for (let i = 0; i < respostas.length; i++) {
+        const resp = respostas[i] || "-";
+        doc.text(`Questão ${i + 1}: ${resp}`, 20, y);
+        y += 6;
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+      }
+
+      doc.save("relatorio_questoes.pdf");
+    }
+
+    function atualizar() {
+
+
+      container.innerHTML = "";
+      let certas = 0, erradas = 0;
+
+      for (let i = 0; i < TOTAL; i++) {
+        const resp = respostas[i];
+        if (resp === 'C') certas++;
+        if (resp === 'E') erradas++;
+
+        let icone = "🔲";
+        if (resp === 'C') icone = "✅";
+        if (resp === 'E') icone = "❌";
+        if (resp === 'B') icone = "⬜";
+
+        const linha = document.createElement('div');
+        linha.className = "questao";
+        linha.innerHTML = `
+          <div class="numero">Questão ${i + 1}</div>
+          <div class="marcacao">${icone}</div>
+          <div class="acoes">
+            <button class="btn certo" onclick="marcar(${i}, 'C')">✅</button>
+            <button class="btn errado" onclick="marcar(${i}, 'E')">❌</button>
+            <button class="btn branco" onclick="marcar(${i}, 'B')">⬜</button>
+          </div>
+        `;
+        container.appendChild(linha);
+      }
+
+      certasEl.textContent = certas;
+      erradasEl.textContent = erradas;
+      faltamCertasEl.textContent = Math.max(0, 60 - certas);
+      
+      faltamErradasEl.textContent = Math.max(0, 60 - erradas);
+
+      const barraC = document.getElementById('barraCertas');
+      const barraE = document.getElementById('barraErradas');
+      barraC.style.width = Math.min(100, (certas / 60) * 100) + '%';
+      barraE.style.width = Math.min(100, (erradas / 60) * 100) + '%';
+
+    }
+
+    
+    const inicio = Date.now();
+    setInterval(atualizarCronometro, 1000);
+    atualizar();
+
+  </script>
+</body>
+</html>
