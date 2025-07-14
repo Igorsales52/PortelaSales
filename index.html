@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DH-Locações</title>
+<style>
+  body {
+    background-color: #000;
+    color: #ff6600;
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  h1, h2 {
+    color: #ff6600;
+  }
+  input, select, button {
+    margin: 5px 0;
+    padding: 5px;
+    font-size: 14px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    color: #ff6600;
+  }
+  th, td {
+    border: 1px solid #ff6600;
+    padding: 5px;
+    text-align: center;
+  }
+  button {
+    background-color: #ff6600;
+    border: none;
+    color: #000;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #cc5200;
+  }
+  .container {
+    max-width: 1024px;
+    margin: auto;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>DH-Locações</h1>
+
+  <section id="vehicles-section">
+    <h2>Veículos e Locações</h2>
+    <form id="vehicle-form">
+      <input type="text" id="vehicle-name" placeholder="Nome/Placa" required />
+      <input type="date" id="vehicle-start" required />
+      <input type="number" id="vehicle-total" placeholder="Valor total da locação" required min="0" step="0.01" />
+      <button type="submit">Adicionar Veículo</button>
+    </form>
+    <table id="vehicles-table">
+      <thead>
+        <tr>
+          <th>Nome/Placa</th>
+          <th>Início</th>
+          <th>Vencimento Semanal</th>
+          <th>Valor Total</th>
+          <th>Pagamentos</th>
+          <th>Valor Pago</th>
+          <th>Valor Restante</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="payment-section" style="margin-top:20px;">
+    <h2>Registrar Pagamento</h2>
+    <form id="payment-form">
+      <select id="payment-vehicle" required></select>
+      <input type="date" id="payment-date" required />
+      <input type="number" id="payment-amount" placeholder="Valor pago" required min="0" step="0.01" />
+      <button type="submit">Adicionar Pagamento</button>
+    </form>
+  </section>
+
+  <section id="maintenance-section" style="margin-top:40px;">
+    <h2>Manutenção</h2>
+    <form id="maintenance-form">
+      <select id="maintenance-vehicle" required></select>
+      <input type="date" id="maintenance-date" required />
+      <input type="text" id="maintenance-piece" placeholder="Peça" required />
+      <input type="number" id="maintenance-value" placeholder="Valor" required min="0" step="0.01" />
+      <button type="submit">Adicionar Manutenção</button>
+    </form>
+    <table id="maintenance-table">
+      <thead>
+        <tr>
+          <th>Veículo</th>
+          <th>Data</th>
+          <th>Peça</th>
+          <th>Valor</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section id="actions-section" style="margin-top:20px;">
+    <button id="import-xlsx">Importar .xlsx</button>
+    <button id="export-xlsx">Exportar .xlsx</button>
+    <input type="file" id="file-input" style="display:none;" accept=".xlsx" />
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+  let data = {
+    vehicles: [],
+    payments: [],
+    maintenance: []
+  };
+
+  function saveData() {
+    localStorage.setItem('dhLocacoesData', JSON.stringify(data));
+  }
+
+  function loadData() {
+    const saved = localStorage.getItem('dhLocacoesData');
+    if (saved) {
+      data = JSON.parse(saved);
+    }
+  }
+
+  function formatDate(dateStr) {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('pt-BR');
+  }
+
+  function calculateWeeklyDue(startDateStr) {
+    const start = new Date(startDateStr);
+    const now = new Date();
+    const diffMs = now - start;
+    const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+    return diffWeeks >= 0 ? diffWeeks : 0;
+  }
+
+  function totalPago(veiculoIdx) {
+    return data.payments
+      .filter(p => p.veiculo === veiculoIdx)
+      .reduce((acc, p) => acc + p.valor, 0);
+  }
+
+  function renderVehicles() {
+    const tbody = document.querySelector('#vehicles-table tbody');
+    tbody.innerHTML = '';
+
+    const selectPaymentVehicle = document.getElementById('payment-vehicle');
+    const selectMaintenanceVehicle = document.getElementById('maintenance-vehicle');
+    selectPaymentVehicle.innerHTML = '';
+    selectMaintenanceVehicle.innerHTML = '';
+
+    data.vehicles.forEach((v, i) => {
+      const pago = totalPago(i);
+      const restante = v.total - pago;
+
+      const pagamentos = data.payments
+        .filter(p => p.veiculo === i)
+        .map(p => `${formatDate(p.data)}: R$ ${p.valor.toFixed(2)}`)
+        .join('<br>') || '-';
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${v.nome}</td>
+        <td>${formatDate(v.inicio)}</td>
+        <td>${calculateWeeklyDue(v.inicio)} semanas</td>
+        <td>R$ ${v.total.toFixed(2)}</td>
+        <td style="text-align:left; font-size:0.85em;">${pagamentos}</td>
+        <td>R$ ${pago.toFixed(2)}</td>
+        <td>R$ ${restante.toFixed(2)}</td>
+        <td><button data-index="${i}" class="btn-remove-vehicle">Remover</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      const option1 = document.createElement('option');
+      option1.value = i;
+      option1.textContent = v.nome;
+      selectPaymentVehicle.appendChild(option1);
+
+      const option2 = document.createElement('option');
+      option2.value = i;
+      option2.textContent = v.nome;
+      selectMaintenanceVehicle.appendChild(option2);
+    });
+
+    document.querySelectorAll('.btn-remove-vehicle').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const idx = e.target.dataset.index;
+        data.vehicles.splice(idx, 1);
+        data.payments = data.payments.filter(p => p.veiculo !== idx);
+        data.maintenance = data.maintenance.filter(m => m.veiculo !== idx);
+        saveData();
+        renderVehicles();
+        renderMaintenance();
+      });
+    });
+  }
+
+  function renderMaintenance() {
+    const tbody = document.querySelector('#maintenance-table tbody');
+    tbody.innerHTML = '';
+    data.maintenance.forEach((m, i) => {
+      const veiculo = data.vehicles[m.veiculo] ? data.vehicles[m.veiculo].nome : '[Veículo removido]';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${veiculo}</td>
+        <td>${formatDate(m.data)}</td>
+        <td>${m.peca}</td>
+        <td>R$ ${m.valor.toFixed(2)}</td>
+        <td><button data-index="${i}" class="btn-remove-maintenance">Remover</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.querySelectorAll('.btn-remove-maintenance').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const idx = e.target.dataset.index;
+        data.maintenance.splice(idx, 1);
+        saveData();
+        renderMaintenance();
+      });
+    });
+  }
+
+  document.getElementById('vehicle-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const nome = document.getElementById('vehicle-name').value.trim();
+    const inicio = document.getElementById('vehicle-start').value;
+    const total = parseFloat(document.getElementById('vehicle-total').value);
+
+    if (!nome || !inicio || isNaN(total)) {
+      alert('Preencha todos os campos corretamente.');
+      return;
+    }
+
+    data.vehicles.push({ nome, inicio, total });
+    saveData();
+    renderVehicles();
+
+    e.target.reset();
+  });
+
+  document.getElementById('payment-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const veiculo = document.getElementById('payment-vehicle').value;
+    const dataPag = document.getElementById('payment-date').value;
+    const valor = parseFloat(document.getElementById('payment-amount').value);
+
+    if (veiculo === '' || !dataPag || isNaN(valor) || valor <= 0) {
+      alert('Preencha todos os campos de pagamento corretamente.');
+      return;
+    }
+
+    data.payments.push({ veiculo, data: dataPag, valor });
+    saveData();
+    renderVehicles();
+
+    e.target.reset();
+  });
+
+  document.getElementById('maintenance-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const veiculo = document.getElementById('maintenance-vehicle').value;
+    const dataManut = document.getElementById('maintenance-date').value;
+    const peca = document.getElementById('maintenance-piece').value.trim();
+    const valor = parseFloat(document.getElementById('maintenance-value').value);
+
+    if (veiculo === '' || !dataManut || !peca || isNaN(valor)) {
+      alert('Preencha todos os campos corretamente.');
+      return;
+    }
+
+    data.maintenance.push({ veiculo, data: dataManut, peca, valor });
+    saveData();
+    renderMaintenance();
+
+    e.target.reset();
+  });
+
+  document.getElementById('import-xlsx').addEventListener('click', () => {
+    document.getElementById('file-input').click();
+  });
+
+  document.getElementById('file-input').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataXLSX = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(dataXLSX, { type: 'array' });
+
+      const sheetName1 = workbook.SheetNames[0];
+      const sheet1 = workbook.Sheets[sheetName1];
+      const jsonVehicles = XLSX.utils.sheet_to_json(sheet1);
+
+      const sheetName2 = workbook.SheetNames[1];
+      const sheet2 = workbook.Sheets[sheetName2];
+      const jsonPayments = sheet2 ? XLSX.utils.sheet_to_json(sheet2) : [];
+
+      const sheetName3 = workbook.SheetNames[2];
+      const sheet3 = workbook.Sheets[sheetName3];
+      const jsonMaintenance = sheet3 ? XLSX.utils.sheet_to_json(sheet3) : [];
+
+      data.vehicles = jsonVehicles.map(v => ({
+        nome: v.Nome || '',
+        inicio: v.Inicio || new Date().toISOString().slice(0,10),
+        total: parseFloat(v['Valor Total']) || 0
+      }));
+
+      data.payments = jsonPayments.map(p => ({
+        veiculo: p.Veiculo ? data.vehicles.findIndex(v => v.nome === p.Veiculo) : -1,
+        data: p['Data Pagamento'] || new Date().toISOString().slice(0,10),
+        valor: parseFloat(p['Valor Pago']) || 0
+      })).filter(p => p.veiculo >= 0);
+
+      data.maintenance = jsonMaintenance.map(m => ({
+        veiculo: m.Veiculo ? data.vehicles.findIndex(v => v.nome === m.Veiculo) : -1,
+        data: m.Data || new Date().toISOString().slice(0,10),
+        peca: m.Peça || '',
+        valor: parseFloat(m.Valor) || 0
+      })).filter(m => m.veiculo >= 0);
+
+      saveData();
+      renderVehicles();
+      renderMaintenance();
+      alert('Importação concluída!');
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  document.getElementById('export-xlsx').addEventListener('click', () => {
+    const vehiclesData = data.vehicles.map(v => ({
+      Nome: v.nome,
+      Inicio: v.inicio,
+      'Valor Total': v.total
+    }));
+
+    const paymentsData = data.payments.map(p => ({
+      Veiculo: data.vehicles[p.veiculo] ? data.vehicles[p.veiculo].nome : '[Removido]',
+      'Data Pagamento': p.data,
+      'Valor Pago': p.valor
+    }));
+
+    const maintenanceData = data.maintenance.map(m => ({
+      Veiculo: data.vehicles[m.veiculo] ? data.vehicles[m.veiculo].nome : '[Removido]',
+      Data: m.data,
+      Peça: m.peca,
+      Valor: m.valor
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const wsVehicles = XLSX.utils.json_to_sheet(vehiclesData);
+    const wsPayments = XLSX.utils.json_to_sheet(paymentsData);
+    const wsMaintenance = XLSX.utils.json_to_sheet(maintenanceData);
+
+    XLSX.utils.book_append_sheet(wb, wsVehicles, 'Veículos');
+    XLSX.utils.book_append_sheet(wb, wsPayments, 'Pagamentos');
+    XLSX.utils.book_append_sheet(wb, wsMaintenance, 'Manutenção');
+
+    XLSX.writeFile(wb, 'DH-Locações-export.xlsx');
+  });
+
+  window.onload = () => {
+    loadData();
+    renderVehicles();
+    renderMaintenance();
+  };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</body>
+</html>
